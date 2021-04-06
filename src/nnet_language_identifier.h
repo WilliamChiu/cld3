@@ -93,6 +93,7 @@ class NNetLanguageIdentifier {
   // skipped. If the input text is too long, only the first
   // kMaxNumInputBytesToConsider bytes are processed.
   std::vector<Result> FindTopNMostFreqLangs(const string &text, int num_langs);
+  std::vector<std::tuple<string,string>> EnZhSplitter(const string &text);
 
   // String returned when a language is unknown or prediction cannot be made.
   static const char kUnknown[];
@@ -130,6 +131,7 @@ class NNetLanguageIdentifier {
   // Finds the most likely language for the given text. Assumes that the text is
   // interchange valid UTF8.
   Result FindLanguageOfValidUTF8(const string &text);
+  string FindLanguageOfValidUTF8Revised(const string &text);
 
   // Returns the language name corresponding to the given id.
   string GetLanguageName(int language_id) const;

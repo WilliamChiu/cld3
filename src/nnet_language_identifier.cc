@@ -264,6 +264,84 @@ NNetLanguageIdentifier::Result NNetLanguageIdentifier::FindLanguageOfValidUTF8(
   return result;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+string NNetLanguageIdentifier::FindLanguageOfValidUTF8Revised(
+    const string &text) {
+  // Create a Sentence storing the input text.
+  Sentence sentence;
+  sentence.set_text(text);
+
+  // Predict language.
+  // TODO(salcianu): reuse vector<FeatureVector>.
+  std::vector<FeatureVector> features(feature_extractor_.NumEmbeddings());
+  GetFeatures(&sentence, &features);
+
+  EmbeddingNetwork::Vector scores;
+  network_.ComputeFinalScores(features, &scores);
+  int prediction_id = -1;
+  float max_val = -std::numeric_limits<float>::infinity();
+
+  // find zh_Ltn, zh, en
+  int meme[] = {10, 47, 98};
+
+  for (size_t i = 0; i < 3; ++i) {
+    if (scores[meme[i]] > max_val) {
+      prediction_id = meme[i];
+      max_val = scores[meme[i]];
+    }
+  }
+
+  return GetLanguageName(prediction_id);
+}
+
+std::vector<std::tuple<string, string>>
+NNetLanguageIdentifier::EnZhSplitter(const string &text) {
+  std::vector<std::tuple<string, string>> results;
+
+  // Truncate the input text if it is too long and find the span containing
+  // interchange-valid UTF8.
+  const int num_valid_bytes = FindNumValidBytesToProcess(text);
+  if (num_valid_bytes == 0) {
+    return results;
+  }
+
+  // Process each subsequence of the same script.
+  CLD2::ScriptScanner ss(text.c_str(), num_valid_bytes, /*is_plain_text=*/true);
+  CLD2::LangSpan script_span;
+  std::unordered_map<string, LangChunksStats> lang_stats;
+  int total_num_bytes = 0;
+  string language;
+  int chunk_size = 0;  // Use the default.
+  while (ss.GetOneScriptSpanLower(&script_span)) {
+    const int num_original_span_bytes = script_span.text_bytes;
+
+    // Remove repetitive chunks or ones containing mostly spaces.
+    const int new_length = CLD2::CheapSqueezeInplace(
+        script_span.text, script_span.text_bytes, chunk_size);
+    script_span.text_bytes = new_length;
+
+    if (script_span.text_bytes < min_num_bytes_) {
+      continue;
+    }
+    total_num_bytes += num_original_span_bytes;
+
+    const string selected_text = SelectTextGivenScriptSpan(script_span);
+
+    language = FindLanguageOfValidUTF8Revised(selected_text);
+    std::tuple<string,string> span (language, selected_text);
+
+    results.push_back(span);
+  
+  }
+
+  return results;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 std::vector<NNetLanguageIdentifier::Result>
 NNetLanguageIdentifier::FindTopNMostFreqLangs(const string &text,
                                               int num_langs) {
